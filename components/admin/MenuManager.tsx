@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -41,14 +41,17 @@ export default function MenuManager({ initial }: { initial: AdminCategory[] }) {
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
-  useEffect(() => {
+  // Re-sync optimistic state whenever fresh server data arrives (router.refresh).
+  const [prevInitial, setPrevInitial] = useState(initial);
+  if (prevInitial !== initial) {
+    setPrevInitial(initial);
     setCats(initial);
-    setSelectedId((prev) =>
-      prev != null && initial.some((c) => c.id === prev)
-        ? prev
+    setSelectedId(
+      selectedId != null && initial.some((c) => c.id === selectedId)
+        ? selectedId
         : (initial[0]?.id ?? null),
     );
-  }, [initial]);
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),

@@ -41,7 +41,9 @@ export default function ARExperience({
   const [ui, setUi] = useState<UiState>("intro");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const uiRef = useRef<UiState>("intro");
-  uiRef.current = ui;
+  useEffect(() => {
+    uiRef.current = ui;
+  }, [ui]);
   const trackingRef = useRef(false);
   const placedRef = useRef(false);
   const handlesRef = useRef<ArHandles | null>(null);
