@@ -20,7 +20,7 @@ type UiState =
 
 type ArHandles = {
   stop: () => void;
-  setPlaced: (placed: boolean) => void;
+  setVisible: (visible: boolean) => void;
 };
 
 export default function ARExperience({
@@ -40,6 +40,7 @@ export default function ARExperience({
   const containerRef = useRef<HTMLDivElement>(null);
   const [ui, setUi] = useState<UiState>("intro");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [qrLost, setQrLost] = useState(false);
   const uiRef = useRef<UiState>("intro");
   useEffect(() => {
     uiRef.current = ui;
@@ -79,8 +80,8 @@ export default function ARExperience({
       const pmrem = new THREE.PMREMGenerator(renderer);
       scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
-      // Content lives on the scene root (not the anchor group) so it can
-      // persist at its last pose when tracking is lost (PRD decision #7).
+      // Content lives on the scene root and mirrors the anchor's matrix while
+      // tracking; it hides whenever the QR leaves the frame.
       const contentGroup = new THREE.Group();
       contentGroup.matrixAutoUpdate = false;
       contentGroup.visible = false;
@@ -110,12 +111,22 @@ export default function ARExperience({
       const anchor = mindar.addAnchor(0);
       anchor.onTargetFound = () => {
         trackingRef.current = true;
-        if (!placedRef.current && uiRef.current !== "placed") setUi("found");
+        if (placedRef.current) {
+          contentGroup.visible = true;
+          setQrLost(false);
+        } else if (uiRef.current !== "placed") {
+          setUi("found");
+        }
       };
       anchor.onTargetLost = () => {
         trackingRef.current = false;
-        // Placed content simply stops receiving matrix updates and stays put.
-        if (!placedRef.current && uiRef.current === "found") setUi("scanning");
+        if (placedRef.current) {
+          // Hide the dish until the QR code is back in view.
+          contentGroup.visible = false;
+          setQrLost(true);
+        } else if (uiRef.current === "found") {
+          setUi("scanning");
+        }
       };
 
       const clock = new THREE.Clock();
@@ -138,8 +149,8 @@ export default function ARExperience({
             renderer.dispose();
           } catch {}
         },
-        setPlaced: (placed: boolean) => {
-          contentGroup.visible = placed;
+        setVisible: (visible: boolean) => {
+          contentGroup.visible = visible;
         },
       };
 
@@ -158,13 +169,15 @@ export default function ARExperience({
 
   function placeModel() {
     placedRef.current = true;
-    handlesRef.current?.setPlaced(true);
+    handlesRef.current?.setVisible(trackingRef.current);
+    setQrLost(!trackingRef.current);
     setUi("placed");
   }
 
   function rescan() {
     placedRef.current = false;
-    handlesRef.current?.setPlaced(false);
+    handlesRef.current?.setVisible(false);
+    setQrLost(false);
     setUi(trackingRef.current ? "found" : "scanning");
   }
 
@@ -253,7 +266,9 @@ export default function ARExperience({
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-between p-5">
           {ui === "placed" ? (
             <span className="mx-auto rounded-full bg-sage-ink px-3.5 py-1.5 font-sans text-[10.5px] font-semibold text-sage-tint">
-              Anchored — stays if code leaves frame
+              {qrLost
+                ? "QR code lost — point the camera back at it"
+                : "On the QR code — tracking"}
             </span>
           ) : (
             <span className="rounded-full bg-[rgba(245,234,216,0.12)] px-3 py-[5px] font-sans text-[11px] font-semibold tracking-wide text-ar-accent">
@@ -320,8 +335,8 @@ export default function ARExperience({
           <div className="absolute inset-x-0 bottom-0 z-10 flex flex-col gap-3 rounded-t-panel bg-cream px-5 pb-6 pt-[22px]">
             <h2 className="font-display text-[19px] text-ink">Place model here?</h2>
             <p className="font-sans text-[13px] leading-relaxed text-muted">
-              The dish will appear on the QR code and stay anchored, even if the
-              code leaves the frame.
+              The dish will appear on the QR code and spin. Keep the code in
+              view to see it.
             </p>
             <div className="flex gap-2.5">
               <button
@@ -344,9 +359,11 @@ export default function ARExperience({
       {/* ---- placed (O·06) ---- */}
       {ui === "placed" && (
         <div className="absolute inset-x-0 bottom-0 z-10 flex flex-col gap-3 px-5 pb-6">
-          <span className="mx-auto font-sans text-[11px] font-semibold tracking-wide text-ar-accent">
-            rotating · {SECONDS_PER_TURN} s / turn
-          </span>
+          {!qrLost && (
+            <span className="mx-auto font-sans text-[11px] font-semibold tracking-wide text-ar-accent">
+              rotating · {SECONDS_PER_TURN} s / turn
+            </span>
+          )}
           <div className="flex items-center justify-between">
             <div className="flex flex-col">
               <span className="font-display text-base text-cream">{itemName}</span>
